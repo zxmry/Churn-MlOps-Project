@@ -118,6 +118,9 @@ What's left:
 - `ruff`
 - `pytest`: the leakage test, label tests, a **model quality gate** (a boosting model must reach PR-AUC > 0.75 on synthetic data with a planted signal), and an API contract test that also checks prediction logging
 - `docker build`
+- A PR that makes features include snapshot-day transactions is blocked by the leakage test:
+
+![CI blocking a leaky PR](reports/ci_failing.png)
 
 The tests use synthetic data, so CI never needs the dataset.
 
