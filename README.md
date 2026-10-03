@@ -6,13 +6,13 @@ The data is [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/onlin
 
 ```mermaid
 flowchart LR
-    A[raw xlsx<br/>sha256 logged] --> B[features.py<br/>point-in-time]
-    B --> C[train.py<br/>MLflow runs]
-    C --> D[(Registry<br/>churn-model@champion)]
-    D -->|export| E[FastAPI in Docker]
-    F[replay.py<br/>Aug–Dec 2011] --> E
-    E --> G[(predictions.db)]
-    G --> H[drift.py<br/>PSI + delayed labels]
+    A["raw xlsx<br/>sha256 logged"] --> B["features.py<br/>point-in-time"]
+    B --> C["train.py<br/>MLflow runs"]
+    C --> D[("Registry<br/>churn-model@champion")]
+    D -->|export| E["FastAPI in Docker"]
+    F["replay.py<br/>Aug–Dec 2011"] --> E
+    E --> G[("predictions.db")]
+    G --> H["drift.py<br/>PSI + delayed labels"]
     H -.->|retrain| C
 ```
 
