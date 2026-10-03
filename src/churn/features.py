@@ -27,7 +27,7 @@ SPLITS = {
 
 
 def build_features(tx: pd.DataFrame, t: pd.Timestamp) -> pd.DataFrame:
-    hist = tx[tx["ts"] < t]
+    hist = tx[tx["ts"] <= t]
     first_seen = hist.groupby("customer_id")["ts"].min()
     past = hist[hist["ts"] >= t - LOOKBACK]  # population: bought within the lookback
     g = past.groupby("customer_id")
