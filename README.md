@@ -1,5 +1,7 @@
 # Customer churn: full MLOps lifecycle
 
+![CI](https://github.com/zxmry/Churn-MlOps-Project/actions/workflows/ci.yml/badge.svg)
+
 Predict which customers of a UK online retailer will **stop buying in the next 90 days**. The project goes past the model to cover experiment tracking, a model registry, CI, a containerised API, and drift monitoring on replayed "production" traffic.
 
 The data is [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii): about 780k cleaned transactions from 5,878 customers, Dec 2009 to Dec 2011.
