@@ -21,4 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t churn:${{ github.sha }} .
+      - run: docker build -t churn .
+      - name: Smoke test the container
+        run: |
+          docker run -d --name churn -p 8000:8000 churn
+          for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 1; done
+          curl -sf localhost:8000/health | grep -q model_version
+          curl -sf -X POST localhost:8000/predict -H "Content-Type: application/json" \
+            -d @tests/smoke_request.json | grep -q churn_probability
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8000/predict \
+            -H "Content-Type: application/json" -d '{"instances": []}')
+          test "$code" = 422
+      - if: failure()
+        run: docker logs churn

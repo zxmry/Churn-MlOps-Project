@@ -1,0 +1,22 @@
+{
+  "version": "3",
+  "run_id": "91087b905f3549f58a2dacfe28a99e1b",
+  "train_start": "2010-06-01",
+  "train_end": "2010-10-01",
+  "metrics": {
+    "val_pr_auc": 0.7963,
+    "val_roc_auc": 0.756,
+    "val_brier": 0.2245,
+    "val_precision_top10": 0.8375,
+    "val_lift_top10": 1.3648,
+    "test_pr_auc": 0.6908,
+    "test_roc_auc": 0.7487,
+    "test_brier": 0.2026,
+    "test_precision_top10": 0.7323,
+    "test_lift_top10": 1.4916,
+    "test_pr_auc_ci_low": 0.6711,
+    "test_pr_auc_ci_high": 0.7119,
+    "test_pr_auc_vs_baseline_ci_low": -0.0208,
+    "test_pr_auc_vs_baseline_ci_high": 0.0009
+  }
+}

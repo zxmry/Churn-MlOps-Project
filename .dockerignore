@@ -2,6 +2,5 @@
 data
 mlruns
 mlflow.db
-model
 predictions.db
 reports

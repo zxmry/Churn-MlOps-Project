@@ -32,7 +32,6 @@ def test_feature_values_and_population():
     assert f.loc[1, "recency_days"] == 17
     assert f.loc[1, "spend_30d"] == 20.0
     assert f.loc[1, "n_invoices_180d"] == 1  # 2010-06-01 purchase is outside the lookback
-    assert f.loc[1, "tenure_days"] == 180  # true tenure 214, clipped to lookback
 
 
 def test_labels_use_90_day_horizon():

@@ -1,0 +1,43 @@
+artifact_path: /Users/ziyorsan/ML_Ops/mlruns/1/models/m-68bf9b6101fc4732a23a625f5d7bfe5a/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.skops
+    predict_fn: predict
+    python_version: 3.11.15
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types:
+    - sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor
+    - churn.train.signed_log
+is_signature_from_type_hint: false
+mlflow_version: 3.16.1
+model_id: m-68bf9b6101fc4732a23a625f5d7bfe5a
+model_size_bytes: 550833
+model_uuid: m-68bf9b6101fc4732a23a625f5d7bfe5a
+prompts: null
+run_id: 91087b905f3549f58a2dacfe28a99e1b
+saved_input_example_info:
+  artifact_path: input_example.json
+  pandas_orient: split
+  serving_input_path: serving_input_example.json
+  type: dataframe
+signature:
+  inputs: '[{"type": "long", "name": "recency_days", "required": true}, {"type": "long",
+    "name": "n_invoices_180d", "required": true}, {"type": "double", "name": "n_invoices_90d",
+    "required": true}, {"type": "double", "name": "spend_180d", "required": true},
+    {"type": "double", "name": "spend_90d", "required": true}, {"type": "double",
+    "name": "spend_30d", "required": true}, {"type": "double", "name": "avg_basket",
+    "required": true}, {"type": "long", "name": "n_products_180d", "required": true},
+    {"type": "double", "name": "spend_trend", "required": true}, {"type": "long",
+    "name": "is_uk", "required": true}]'
+  outputs: '[{"type": "long", "required": true}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-10-05 06:38:51.113607'

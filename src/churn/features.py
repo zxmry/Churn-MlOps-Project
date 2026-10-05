@@ -8,11 +8,12 @@ import pandas as pd
 
 HORIZON = pd.Timedelta(days=90)
 # Fixed lookback for population AND features, so every snapshot sees the same amount of history.
-# (v1 used unbounded lifetime features; they drifted by construction as the data window grew.)
+# v1 used unbounded lifetime features; they drifted by construction as the data window grew.
+# v3 dropped tenure_days: it is left-censored by the dataset start and was the last drifting feature.
 LOOKBACK = pd.Timedelta(days=180)
 
 FEATURES = [
-    "recency_days", "tenure_days", "n_invoices_180d", "n_invoices_90d", "spend_180d",
+    "recency_days", "n_invoices_180d", "n_invoices_90d", "spend_180d",
     "spend_90d", "spend_30d", "avg_basket", "n_products_180d", "spend_trend", "is_uk",
 ]
 
@@ -27,9 +28,7 @@ SPLITS = {
 
 
 def build_features(tx: pd.DataFrame, t: pd.Timestamp) -> pd.DataFrame:
-    hist = tx[tx["ts"] < t]
-    first_seen = hist.groupby("customer_id")["ts"].min()
-    past = hist[hist["ts"] >= t - LOOKBACK]  # population: bought within the lookback
+    past = tx[(tx["ts"] < t) & (tx["ts"] >= t - LOOKBACK)]  # population: bought within the lookback
     g = past.groupby("customer_id")
     f = pd.DataFrame({
         "recency_days": (t - g["ts"].max()).dt.days,
@@ -38,7 +37,6 @@ def build_features(tx: pd.DataFrame, t: pd.Timestamp) -> pd.DataFrame:
         "n_products_180d": g["stock_code"].nunique(),
         "is_uk": (g["country"].agg(lambda s: s.mode().iat[0]) == "United Kingdom").astype(int),
     })
-    f["tenure_days"] = (t - first_seen.reindex(f.index)).dt.days.clip(upper=LOOKBACK.days)
     recent = past[past["ts"] >= t - pd.Timedelta(days=90)]
     f["n_invoices_90d"] = recent.groupby("customer_id")["invoice"].nunique()
     f["spend_90d"] = recent.groupby("customer_id")["amount"].sum()
@@ -64,3 +62,9 @@ def build_dataset(tx: pd.DataFrame, snapshots, with_labels: bool = True) -> pd.D
             f["churn"] = build_labels(tx, t, f.index)
         frames.append(f.assign(snapshot=t).reset_index())
     return pd.concat(frames, ignore_index=True)
+
+
+def matured_snapshots(tx: pd.DataFrame, start: str = "2010-06-01") -> pd.DatetimeIndex:
+    """Monthly snapshots whose 90-day label window has fully closed in the data."""
+    snaps = pd.date_range(start, tx["ts"].max(), freq="MS")
+    return snaps[snaps + HORIZON <= tx["ts"].max()]

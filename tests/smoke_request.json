@@ -1,0 +1,44 @@
+{
+ "as_of": "2011-08-01",
+ "instances": [
+  {
+   "customer_id": 1,
+   "recency_days": 90,
+   "n_invoices_180d": 10,
+   "n_invoices_90d": 0.0,
+   "spend_180d": 230.55,
+   "spend_90d": 0.0,
+   "spend_30d": 0.0,
+   "avg_basket": 23.055,
+   "n_products_180d": 7,
+   "spend_trend": -5.444795832926761,
+   "is_uk": 1
+  },
+  {
+   "customer_id": 2,
+   "recency_days": 13,
+   "n_invoices_180d": 2,
+   "n_invoices_90d": 2.0,
+   "spend_180d": 1268.52,
+   "spend_90d": 1268.52,
+   "spend_30d": 200.0,
+   "avg_basket": 634.26,
+   "n_products_180d": 47,
+   "spend_trend": 7.146394155254587,
+   "is_uk": 0
+  },
+  {
+   "customer_id": 3,
+   "recency_days": 10,
+   "n_invoices_180d": 1,
+   "n_invoices_90d": 1.0,
+   "spend_180d": 488.21,
+   "spend_90d": 488.21,
+   "spend_30d": 488.21,
+   "avg_basket": 488.21,
+   "n_products_180d": 22,
+   "spend_trend": 6.192791845141295,
+   "is_uk": 0
+  }
+ ]
+}
