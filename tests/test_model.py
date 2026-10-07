@@ -38,7 +38,8 @@ def test_predict_contract_and_logging(tmp_path, monkeypatch):
     row = {"customer_id": 42, **X.iloc[0].to_dict()}
     with TestClient(serve.app) as client:
         assert client.get("/health").json()["model_version"] == "7"
-        assert client.get("/", follow_redirects=False).headers["location"] == "/docs"
+        assert "Retention" in client.get("/").text  # business console page
+        assert client.get("/model").json()["version"] == "7"
         r = client.post("/predict", json={"as_of": "2011-08-01", "instances": [row]})
         assert r.status_code == 200
         body = r.json()
@@ -47,6 +48,8 @@ def test_predict_contract_and_logging(tmp_path, monkeypatch):
         bad = client.post("/predict", json={"instances": [{**row, "recency_days": "x"}]})
         assert bad.status_code == 422
         assert client.post("/predict", json={"instances": []}).status_code == 422
+        what_if = client.post("/predict", json={"instances": [row], "log": False})
+        assert what_if.status_code == 200  # simulations are scored but not logged (checked below)
 
     with sqlite3.connect(tmp_path / "pred.db") as con:
         logged = pd.read_sql("select * from predictions", con)

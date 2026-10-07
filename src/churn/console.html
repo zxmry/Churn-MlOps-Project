@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retention Console · Churn Risk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Retention desk: summary strip, ranked account list, what-if simulator. */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --ink: #142033; --muted: #5d6b7e; --line: #dfe4eb;
+  --brand: #0d5c63; --brand-soft: #e1f0f0; --track: #e7ebf0;
+  --high: #c2410c; --high-soft: #fdebe1; --med: #a16207; --med-soft: #fbf1d6; --low: #15803d; --low-soft: #e1f4e7;
+  --sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #0d141e; --panel: #141d29; --ink: #e6ecf3; --muted: #93a1b3; --line: #243143;
+  --brand: #4fc1c9; --brand-soft: #123036; --track: #233042;
+  --high: #fb8a55; --high-soft: #3a1f14; --med: #e8b84a; --med-soft: #33290f; --low: #5dd389; --low-soft: #12301e;
+  color-scheme: dark } }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans) }
+a { color: var(--brand) }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px 56px }
+h1, h2 { margin: 0; line-height: 1.2 }
+h2 { font-size: 1.05rem; font-weight: 600 }
+.muted { color: var(--muted) }
+.num { font-variant-numeric: tabular-nums }
+
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between;
+  padding: 22px 0 18px; border-bottom: 1px solid var(--line) }
+.brand { display: flex; flex-direction: column; gap: 2px }
+.brand h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.01em }
+.brand h1 span { color: var(--brand) }
+.nav { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+.chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--panel);
+  border-radius: 99px; padding: 5px 12px; font: 500 0.82rem var(--mono); text-decoration: none; color: var(--ink) }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted) }
+.dot.ok { background: var(--low); box-shadow: 0 0 0 3px var(--low-soft) }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 20px 0 }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.kpi .label { font: 500 0.72rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted) }
+.kpi .value { font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums }
+.kpi .note { font-size: 0.82rem; color: var(--muted) }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 16px; align-items: start }
+@media (max-width: 1100px) { .grid { grid-template-columns: 1fr } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px;
+  display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+.panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px }
+
+.scroll { overflow-x: auto }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums }
+th { text-align: left; font: 500 0.7rem var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted);
+  padding: 0 10px 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
+td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap }
+tbody tr { cursor: pointer }
+tbody tr:hover, tbody tr:focus-visible { background: var(--brand-soft); outline: none }
+tbody tr.selected { box-shadow: inset 3px 0 0 var(--brand) }
+td.r, th.r { text-align: right }
+.acct { font-weight: 600 }
+.acct small { display: block; font-weight: 400; color: var(--muted); font-size: 0.78rem }
+.bar { display: flex; align-items: center; gap: 8px; min-width: 130px }
+.bar .track { flex: 1; height: 7px; background: var(--track); border-radius: 99px; overflow: hidden }
+.bar .fill { height: 100%; border-radius: 99px }
+.bar b { font-weight: 600; width: 3.2em; text-align: right }
+.pill { display: inline-block; font: 600 0.72rem var(--mono); padding: 3px 8px; border-radius: 99px }
+.pill.high { background: var(--high-soft); color: var(--high) }
+.pill.med { background: var(--med-soft); color: var(--med) }
+.pill.low { background: var(--low-soft); color: var(--low) }
+.trend.up { color: var(--low) } .trend.down { color: var(--high) }
+
+/* simulator */
+.sim { display: grid; grid-template-columns: 1fr; gap: 16px }
+.result { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 14px }
+.gauge { width: 170px; flex: none }
+.gauge text { fill: var(--ink); font-family: var(--sans) }
+.verdict { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 }
+.verdict .action { font-weight: 600 }
+.verdict .pill { align-self: flex-start }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 18px }
+.field { display: flex; flex-direction: column; gap: 4px }
+.field label { display: flex; justify-content: space-between; gap: 8px; font-size: 0.86rem; color: var(--muted) }
+.field label output { font: 500 0.86rem var(--mono); color: var(--ink) }
+input[type=range] { width: 100%; accent-color: var(--brand) }
+input[type=range]:disabled { opacity: 0.35 }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 0.9rem }
+.toggle input { accent-color: var(--brand); width: 16px; height: 16px }
+.signals { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem }
+.fine { font-size: 0.8rem; color: var(--muted) }
+.banner { background: var(--high-soft); color: var(--high); border-radius: 8px; padding: 10px 14px }
+.presets { display: flex; flex-wrap: wrap; gap: 8px }
+button.preset { font: 500 0.82rem var(--sans); border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  border-radius: 6px; padding: 5px 10px; cursor: pointer }
+button.preset:hover { border-color: var(--brand) }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px }
+footer { padding-top: 24px; font-size: 0.82rem; color: var(--muted) }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <h1>Retention <span>Console</span></h1>
+    <span class="muted">UK online gift wholesaler · churn = no order in the next 90 days</span>
+  </div>
+  <nav class="nav">
+    <span class="chip" id="model-chip"><i class="dot" id="dot"></i><span id="model-text">connecting…</span></span>
+    <a class="chip" href="/docs">API docs</a>
+    <a class="chip" href="https://github.com/zxmry/Churn-MlOps-Project">GitHub</a>
+  </nav>
+</header>
+
+<div class="banner" id="error" hidden></div>
+
+<section class="kpis" aria-label="Summary">
+  <div class="kpi"><span class="label">High-risk accounts</span><span class="value" id="k-high">–</span><span class="note" id="k-high-note">in the sample book</span></div>
+  <div class="kpi"><span class="label">Expected spend at risk</span><span class="value" id="k-risk">–</span><span class="note">Σ churn probability × last 180-day spend</span></div>
+  <div class="kpi"><span class="label">Model ranking quality</span><span class="value" id="k-prauc">–</span><span class="note" id="k-prauc-note">holdout PR-AUC</span></div>
+  <div class="kpi"><span class="label">Top-10% lift</span><span class="value" id="k-lift">–</span><span class="note">vs contacting customers at random</span></div>
+</section>
+
+<div class="grid">
+  <section class="panel" aria-labelledby="book-h">
+    <div class="panel-head">
+      <h2 id="book-h">Account book, ranked by churn risk</h2>
+      <span class="fine">Sample accounts · select one to simulate</span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Account</th><th>Churn risk</th><th>Tier</th><th class="r">Last order</th><th class="r">Orders 180d</th><th class="r">Spend 180d</th><th>Trend</th></tr></thead>
+        <tbody id="book"><tr><td colspan="7" class="muted">Scoring accounts…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="sim-h">
+    <div class="panel-head">
+      <h2 id="sim-h">What-if simulator</h2>
+      <span class="fine" id="sim-acct">Custom profile</span>
+    </div>
+    <div class="presets" aria-label="Presets">
+      <button type="button" class="preset" data-preset="loyal">Loyal regular</button>
+      <button type="button" class="preset" data-preset="cooling">Cooling off</button>
+      <button type="button" class="preset" data-preset="lapsed">Gone quiet</button>
+    </div>
+    <div class="sim">
+      <div class="result" aria-live="polite">
+        <svg class="gauge" viewBox="0 0 200 120" role="img" aria-labelledby="g-label">
+          <title id="g-label">Churn probability gauge</title>
+          <path d="M20 105 A80 80 0 0 1 180 105" fill="none" stroke="var(--track)" stroke-width="16" stroke-linecap="round"/>
+          <path id="g-arc" d="M20 105 A80 80 0 0 1 180 105" fill="none" stroke="var(--brand)" stroke-width="16" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/>
+          <text id="g-val" x="100" y="96" text-anchor="middle" font-size="34" font-weight="600">–</text>
+          <text x="100" y="116" text-anchor="middle" font-size="11" fill="var(--muted)">churn probability</text>
+        </svg>
+        <div class="verdict">
+          <span id="v-tier" class="pill low">–</span>
+          <span class="action" id="v-action">–</span>
+          <span class="fine" id="v-why"></span>
+        </div>
+      </div>
+      <div class="fields" id="fields"></div>
+      <label class="toggle"><input type="checkbox" id="is_uk" checked> Based in the United Kingdom</label>
+      <div>
+        <h2 style="font-size:0.92rem">What stands out in this profile</h2>
+        <ul class="signals" id="signals"></ul>
+        <p class="fine">These notes describe the inputs. They are not the model's internal explanation. Simulations are not logged as production traffic.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  Risk tiers: high ≥ 60%, medium 35–60%, low &lt; 35%. The base churn rate in recent data is about 45%.
+  Model built on UCI Online Retail II (2009–2011). Sample accounts are illustrative, not real customers.
+</footer>
+</div>
+
+<script>
+const FIELDS = [
+  ["recency_days", "Days since last order", 0, 180, 1, v => `${v} d`],
+  ["n_invoices_180d", "Orders, last 180 days", 1, 30, 1, v => v],
+  ["n_invoices_90d", "Orders, last 90 days", 0, 30, 1, v => v],
+  ["spend_180d", "Spend, last 180 days", 0, 10000, 50, gbp],
+  ["spend_90d", "Spend, last 90 days", 0, 10000, 50, gbp],
+  ["spend_30d", "Spend, last 30 days", 0, 10000, 50, gbp],
+  ["n_products_180d", "Distinct products, 180 days", 1, 200, 1, v => v],
+];
+const ACCOUNTS = [
+  {id: 12347, place: "Iceland", recency_days: 3, n_invoices_180d: 8, n_invoices_90d: 5, spend_180d: 3600, spend_90d: 2400, spend_30d: 900, n_products_180d: 95, is_uk: 0},
+  {id: 13047, place: "United Kingdom", recency_days: 45, n_invoices_180d: 6, n_invoices_90d: 2, spend_180d: 1800, spend_90d: 500, spend_30d: 0, n_products_180d: 60, is_uk: 1},
+  {id: 14156, place: "Ireland", recency_days: 120, n_invoices_180d: 3, n_invoices_90d: 0, spend_180d: 900, spend_90d: 0, spend_30d: 0, n_products_180d: 25, is_uk: 0},
+  {id: 15311, place: "United Kingdom", recency_days: 8, n_invoices_180d: 14, n_invoices_90d: 7, spend_180d: 5200, spend_90d: 2700, spend_30d: 1100, n_products_180d: 140, is_uk: 1},
+  {id: 16029, place: "United Kingdom", recency_days: 70, n_invoices_180d: 2, n_invoices_90d: 1, spend_180d: 420, spend_90d: 150, spend_30d: 0, n_products_180d: 18, is_uk: 1},
+  {id: 17841, place: "United Kingdom", recency_days: 160, n_invoices_180d: 1, n_invoices_90d: 0, spend_180d: 180, spend_90d: 0, spend_30d: 0, n_products_180d: 9, is_uk: 1},
+  {id: 12583, place: "France", recency_days: 20, n_invoices_180d: 4, n_invoices_90d: 2, spend_180d: 1500, spend_90d: 600, spend_30d: 300, n_products_180d: 40, is_uk: 0},
+  {id: 18102, place: "United Kingdom", recency_days: 33, n_invoices_180d: 5, n_invoices_90d: 3, spend_180d: 9800, spend_90d: 4100, spend_30d: 0, n_products_180d: 30, is_uk: 1},
+];
+const PRESETS = {loyal: ACCOUNTS[3], cooling: ACCOUNTS[1], lapsed: ACCOUNTS[5]};
+
+function gbp(v) { return "£" + Math.round(v).toLocaleString("en-GB") }
+function tier(p) {
+  if (p >= 0.6) return {key: "high", label: "High risk", action: "Call this week with a win-back offer"};
+  if (p >= 0.35) return {key: "med", label: "Medium risk", action: "Send a personal reorder reminder"};
+  return {key: "low", label: "Low risk", action: "Keep in the regular newsletter"};
+}
+function color(p) { return `var(--${tier(p).key})` }
+// Same derived features as churn/features.py: the 90 days before the last 90 = spend_180d - spend_90d.
+function toInstance(a) {
+  const prev90 = Math.max(a.spend_180d - a.spend_90d, 0);
+  return {customer_id: a.id || 0, recency_days: a.recency_days, n_invoices_180d: a.n_invoices_180d,
+    n_invoices_90d: a.n_invoices_90d, spend_180d: a.spend_180d, spend_90d: a.spend_90d, spend_30d: a.spend_30d,
+    avg_basket: a.spend_180d / Math.max(a.n_invoices_180d, 1), n_products_180d: a.n_products_180d,
+    spend_trend: Math.log1p(a.spend_90d) - Math.log1p(prev90), is_uk: a.is_uk};
+}
+async function score(accounts) {
+  const r = await fetch("/predict", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({instances: accounts.map(toInstance), log: false})});
+  if (!r.ok) throw new Error(`The model returned HTTP ${r.status}.`);
+  return (await r.json()).predictions.map(p => p.churn_probability);
+}
+function showError(e) { const b = document.getElementById("error"); b.textContent = `Couldn't reach the model. ${e.message} Reload in a minute; the free server may be waking up.`; b.hidden = false }
+function trendCell(a) {
+  const prev = a.spend_180d - a.spend_90d;
+  if (a.spend_90d > prev * 1.1) return `<span class="trend up">▲ growing</span>`;
+  if (a.spend_90d < prev * 0.9) return `<span class="trend down">▼ slowing</span>`;
+  return `<span class="muted">steady</span>`;
+}
+
+// ---- model info
+fetch("/model").then(r => r.json()).then(m => {
+  const x = m.metrics, base = x.test_precision_top10 / x.test_lift_top10;
+  document.getElementById("model-text").textContent = `Model v${m.version} · live`;
+  document.getElementById("dot").classList.add("ok");
+  document.getElementById("k-prauc").textContent = x.test_pr_auc.toFixed(2);
+  document.getElementById("k-prauc-note").textContent = `holdout PR-AUC · random guessing scores ${base.toFixed(2)}`;
+  document.getElementById("k-lift").textContent = `${x.test_lift_top10.toFixed(2)}×`;
+}).catch(showError);
+
+// ---- account book
+let selected = null;
+score(ACCOUNTS).then(ps => {
+  const rows = ACCOUNTS.map((a, i) => ({a, p: ps[i]})).sort((x, y) => y.p - x.p);
+  const high = rows.filter(r => r.p >= 0.6).length;
+  document.getElementById("k-high").textContent = `${high} of ${rows.length}`;
+  document.getElementById("k-risk").textContent = gbp(rows.reduce((s, r) => s + r.p * r.a.spend_180d, 0));
+  const body = document.getElementById("book");
+  body.innerHTML = rows.map(({a, p}) => { const t = tier(p); return `
+    <tr tabindex="0" data-id="${a.id}">
+      <td class="acct">#${a.id}<small>${a.place}</small></td>
+      <td><div class="bar"><div class="track"><div class="fill" style="width:${(p*100).toFixed(0)}%;background:${color(p)}"></div></div><b>${(p*100).toFixed(0)}%</b></div></td>
+      <td><span class="pill ${t.key}">${t.label}</span></td>
+      <td class="r">${a.recency_days} d ago</td>
+      <td class="r">${a.n_invoices_180d}</td>
+      <td class="r">${gbp(a.spend_180d)}</td>
+      <td>${trendCell(a)}</td>
+    </tr>`; }).join("");
+  const pick = tr => { load(ACCOUNTS.find(a => a.id === +tr.dataset.id), `Account #${tr.dataset.id}`);
+    body.querySelectorAll("tr").forEach(r => r.classList.toggle("selected", r === tr)); };
+  body.addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) pick(tr) });
+  body.addEventListener("keydown", e => { const tr = e.target.closest("tr[data-id]"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); pick(tr) } });
+  pick(body.querySelector("tr"));
+}).catch(showError);
+
+// ---- simulator
+const fieldsEl = document.getElementById("fields");
+fieldsEl.innerHTML = FIELDS.map(([k, label, min, max, step]) => `
+  <div class="field"><label for="${k}">${label} <output id="${k}-out"></output></label>
+  <input type="range" id="${k}" min="${min}" max="${max}" step="${step}"></div>`).join("");
+const el = k => document.getElementById(k);
+let current = {...PRESETS.loyal}, timer;
+
+function load(a, label) { current = {...a}; el("sim-acct").textContent = label; render(); }
+function readInputs() {
+  FIELDS.forEach(([k]) => current[k] = +el(k).value);
+  current.is_uk = el("is_uk").checked ? 1 : 0;
+  delete current.id; el("sim-acct").textContent = "Custom profile";
+  document.querySelectorAll("#book tr").forEach(r => r.classList.remove("selected"));
+}
+// Keep the profile internally consistent, the way real purchase histories are.
+function constrain(a) {
+  a.n_invoices_90d = Math.min(a.n_invoices_90d, a.n_invoices_180d);
+  if (a.recency_days > 90) { a.n_invoices_90d = 0; a.spend_90d = 0 } else a.n_invoices_90d = Math.max(a.n_invoices_90d, 1);
+  if (a.recency_days > 30) a.spend_30d = 0;
+  a.spend_90d = Math.min(a.spend_90d, a.spend_180d);
+  a.spend_30d = Math.min(a.spend_30d, a.spend_90d);
+}
+function render() {
+  constrain(current);
+  FIELDS.forEach(([k, , , , , fmt]) => { el(k).value = current[k]; el(k + "-out").textContent = fmt(current[k]) });
+  el("is_uk").checked = !!current.is_uk;
+  el("n_invoices_90d").disabled = el("spend_90d").disabled = current.recency_days > 90;
+  el("spend_30d").disabled = current.recency_days > 30;
+  signals(current);
+  clearTimeout(timer);
+  timer = setTimeout(() => score([current]).then(([p]) => verdict(p)).catch(showError), 120);
+}
+function verdict(p) {
+  const t = tier(p);
+  el("g-arc").setAttribute("stroke-dasharray", `${(p * 100).toFixed(1)} 100`);
+  el("g-arc").setAttribute("stroke", color(p));
+  el("g-val").textContent = `${Math.round(p * 100)}%`;
+  el("v-tier").className = `pill ${t.key}`; el("v-tier").textContent = t.label;
+  el("v-action").textContent = t.action;
+  el("v-why").textContent = `Expected spend at risk: ${gbp(p * current.spend_180d)} of ${gbp(current.spend_180d)} over the last 180 days.`;
+}
+function signals(a) {
+  const out = [], prev = a.spend_180d - a.spend_90d;
+  if (a.recency_days > 90) out.push(`No order for ${a.recency_days} days. 80% of normal gaps between orders are 76 days or less.`);
+  else if (a.recency_days > 45) out.push(`${a.recency_days} days since the last order. The typical gap is 24 days.`);
+  else out.push(`Ordered ${a.recency_days} days ago, within a normal ordering rhythm.`);
+  if (a.spend_90d < prev * 0.9) out.push(`Spending is down: ${gbp(a.spend_90d)} in the last 90 days vs ${gbp(prev)} in the 90 days before.`);
+  else if (a.spend_90d > prev * 1.1) out.push(`Spending is up: ${gbp(a.spend_90d)} in the last 90 days vs ${gbp(prev)} before.`);
+  if (a.n_invoices_180d === 1) out.push("Only one order in six months.");
+  else if (a.n_invoices_90d >= 3) out.push(`Ordering regularly: ${a.n_invoices_90d} orders in the last 90 days.`);
+  out.push(`Average order: ${gbp(a.spend_180d / Math.max(a.n_invoices_180d, 1))} across ${a.n_products_180d} products.`);
+  el("signals").innerHTML = out.map(s => `<li>${s}</li>`).join("");
+}
+fieldsEl.addEventListener("input", () => { readInputs(); render() });
+el("is_uk").addEventListener("change", () => { readInputs(); render() });
+document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => {
+  load(PRESETS[b.dataset.preset], b.textContent);
+  document.querySelectorAll("#book tr").forEach(r => r.classList.remove("selected"));
+}));
+render();
+</script>
+</body>
+</html>
