@@ -15,7 +15,8 @@ flowchart LR
     F["replay.py<br/>Aug–Dec 2011"] --> E
     E --> G[("predictions.db")]
     G --> H["drift.py<br/>PSI + delayed labels"]
-    H -.->|retrain| C
+    H -->|"RETRAIN signal"| I["retrain.py<br/>champion vs challenger"]
+    I -->|"promote only if better"| D
 ```
 
 ## Quickstart
@@ -26,7 +27,8 @@ make data      # download + clean -> data/transactions.parquet
 make train     # sweep, register best as @champion, export to ./model
 make serve     # API on :8000   (or: make docker && make docker-run)
 make replay    # in a 2nd shell: send Aug–Dec 2011 snapshots as live traffic
-make drift     # reports/drift.png + reports/drift.csv
+make drift     # reports/drift.png + reports/drift.csv; prints RETRAIN if needed
+make retrain   # champion/challenger: promotes only if better with confidence
 make mlflow    # browse runs and the registry
 make test      # ruff + pytest (what CI runs)
 ```
@@ -58,20 +60,21 @@ Every MLflow run logs:
 - parameters, the feature list, the raw-data SHA256 and the git commit
 - validation metrics
 
-Only the best run by validation PR-AUC is scored on test. It is then registered as `churn-model` and given the `@champion` alias.
+Only the best run by validation PR-AUC is scored on test, with a **bootstrap 95% CI** (1,000 resamples) and a paired CI for its gain over the baseline. It is then registered as `churn-model` and given the `@champion` alias.
 
 Metrics:
 - **PR-AUC** is the selection metric (better than ROC-AUC under class imbalance).
 - **Brier score** measures calibration.
 - **Precision and lift on the top 10%** are the business metric: if retention can only contact 10% of customers, how many of them are real churners?
 
-| model | val PR-AUC | test PR-AUC | test ROC-AUC | test Brier | precision@10% | lift@10% |
+| model | val PR-AUC | test PR-AUC (95% CI) | test ROC-AUC | test Brier | precision@10% | lift@10% |
 |---|---|---|---|---|---|---|
-| v2 logreg baseline | 0.795 | – | – | – | – | – |
-| **v2 HGB (champion)** | **0.813** | **0.712** | 0.758 | 0.207 | 0.81 | 1.66× |
+| v3 logreg baseline | 0.791 | – | – | – | – | – |
+| **v3 HGB (champion)** | **0.796** | **0.691** (0.671–0.712) | 0.749 | 0.203 | 0.73 | 1.49× |
+| v2 HGB (with `tenure_days`) | 0.813 | 0.712 | 0.758 | 0.207 | 0.81 | 1.66× |
 | v1 HGB (lifetime features) | 0.851 | 0.827 | 0.780 | 0.233 | 0.90 | 1.44× |
 
-Gradient boosting beats the linear baseline, but only by a little: RFM-style features are close to linear in log space.
+**Gradient boosting is not significantly better than logistic regression.** The paired bootstrap CI for the gain on test is −0.021 to +0.001. RFM-style features are close to linear in log space. Selection by validation picked boosting, but a reasonable alternative rule is "prefer the simpler model unless the complex one wins with confidence".
 
 v1's higher PR-AUC is **not** a better model. See section 4.
 
@@ -82,7 +85,7 @@ v1's higher PR-AUC is **not** a better model. See section 4.
 - Input is validated with Pydantic: missing or non-numeric fields and NaN/inf return 422.
 - Every prediction is appended to SQLite with `as_of`, `model_version`, `score`, and the features as JSON. JSON means the log survives feature changes between model versions. (This went wrong when v2 shipped with v1's column layout: the first replay got HTTP 500s.)
 
-The model is mounted into the container rather than baked in, so one image serves any registry version.
+The current `@champion` is exported from the registry into `model/` and **committed**. The Docker image bakes it in, so the container runs anywhere with no registry access, and promoting a model means a PR that changes `model/`, which goes through CI like any code change. The image runs as a non-root user and listens on `$PORT` (default 8000) for hosting platforms.
 
 ## 4. Monitoring: what drift actually found
 
@@ -100,7 +103,7 @@ The cause was **not** customer behaviour: it was dataset construction. The data 
 
 **Fix (v2):** a fixed 180-day lookback for the population and every feature, tenure clipped to 180 days, and training started at 2010-06, the first month with a full lookback. Result:
 
-![v2 drift](reports/drift.png)
+![v2 drift](reports/drift_v2.png)
 
 | | v1 | v2 |
 |---|---|---|
@@ -109,28 +112,99 @@ The cause was **not** customer behaviour: it was dataset construction. The data 
 | predicted vs actual churn, Sep 2011 | 0.38 vs 0.51 | 0.40 vs 0.39 |
 | Brier vs constant predictor (test) | 0.233 vs 0.236 (no skill) | 0.207 vs 0.250 |
 
-What's left:
-- **`tenure_days` still drifts** (PSI around 0.6). The share of customers at the 180-day cap grows as the dataset ages. Next step: drop it, or wait until there are a full 12 months of history before the first training snapshot.
-- **Score PSI rises toward 0.2 in Q4.** `spend_trend` and `recency_days` start to move in December. This is real seasonality (the Christmas ramp), which training (Jun–Oct) only partly covers.
-- **Production PR-AUC (0.68 Aug, 0.61 Sep) is below test (0.71).** That is expected decay, and it's the signal a retraining trigger should watch, rather than PSI alone.
+v2 still had one drifting feature: `tenure_days` (PSI around 0.6). Tenure is left-censored by the dataset start, so the share of customers at the 180-day cap grows as the data ages.
 
-## 5. CI
+**v3 drops `tenure_days`.** That is a trade-off:
+
+| | v2 | v3 |
+|---|---|---|
+| features with PSI > 0.2 (any month) | 1 | **0** |
+| score PSI, Aug → Dec 2011 | 0.14 → 0.18 | **0.005 → 0.018** |
+| predicted vs actual churn, Aug 2011 | 0.40 vs 0.44 | **0.45 vs 0.44** |
+| predicted vs actual churn, Sep 2011 | 0.40 vs 0.39 | 0.44 vs 0.39 |
+| production PR-AUC, Aug / Sep | **0.675 / 0.609** | 0.646 / 0.595 |
+| test PR-AUC | **0.712** | 0.691 |
+
+v3 gives up about 0.02 PR-AUC for inputs and scores that are stable over time. I chose stability: a model whose inputs drift by construction cannot be monitored meaningfully, because every alert is noise.
+
+![v3 drift](reports/drift.png)
+
+The remaining movement is real seasonality. `spend_trend` and `recency_days` rise in December (the Christmas ramp), which the Jun–Oct training window does not cover.
+
+## 5. Retraining: champion vs challenger
+
+`make drift-check` (`python -m churn.drift --check`) exits with code 1 and prints `RETRAIN` when either:
+- the latest month's score PSI is above 0.2, or
+- a month with matured labels has PR-AUC more than 0.05 below the champion's holdout PR-AUC.
+
+For v3 it fired: `2011-09-01 PR-AUC 0.595 < floor 0.641`.
+
+`make retrain` then runs `churn.retrain`:
+1. Train a **challenger** with the champion's model family and hyperparameters on **every matured snapshot** (Jun 2010 – May 2011, 37k rows, now including a Christmas season), with an embargo before the evaluation window.
+2. Score the champion and the challenger on the **same most recent matured months** (Aug–Sep 2011, 5.5k rows).
+3. **Promote only if both hold:**
+   - *Primary metric:* the 90% paired-bootstrap CI for the PR-AUC gain is entirely above 0.
+   - *Guardrail:* Brier score (calibration) is not worse by more than 0.005.
+4. If promoted, register a new version, move `@champion`, and export to `model/`. The decision and both models' metrics are logged to MLflow either way.
+
+The first run:
+
+```
+champion v3: PR-AUC 0.6202  Brier 0.2028
+challenger:  PR-AUC 0.6305  Brier 0.2126
+PR-AUC gain 90% CI [+0.0013, +0.0199]: significant
+Brier change +0.0098 (guardrail +0.005): FAILED
+KEEP champion
+```
+
+The challenger ranks customers better, and the gain is statistically real. But it is worse calibrated, because its training window includes the high-churn post-Christmas months, so its probabilities run high in late summer. **An earlier version of this script checked only PR-AUC and promoted it.** I rolled that back and added the guardrail. The next step is to calibrate the challenger on recent data (isotonic regression), which should let it pass.
+
+## 6. CI
 
 `.github/workflows/ci.yml` runs on every PR and push to `main`:
 - `ruff`
-- `pytest`: the leakage test, label tests, a **model quality gate** (a boosting model must reach PR-AUC > 0.75 on synthetic data with a planted signal), and an API contract test that also checks prediction logging
-- `docker build`
+- `pytest`:
+  - the leakage test and label tests
+  - a **model quality gate** (a boosting model must reach PR-AUC > 0.75 on synthetic data with a planted signal)
+  - an API contract test that also checks prediction logging
+  - a check that the committed `model/` accepts the current feature set
+  - a check that the bootstrap detects a real gain and reports none for identical models
+- `docker build`, then a **container smoke test**: start the image, check `/health`, send a real prediction request, and confirm bad input returns 422
 - A PR that makes features include snapshot-day transactions is blocked by the leakage test:
 
 ![CI blocking a leaky PR](reports/ci_failing.png)
 
-The tests use synthetic data, so CI never needs the dataset.
+The tests use synthetic data or the committed model, so CI never needs the dataset.
 
-## 6. What I'd do next at scale
+## 7. Model card
+
+| | |
+|---|---|
+| **Model** | `churn-model` v3, `HistGradientBoostingClassifier`, 10 features (`model/meta.json`) |
+| **Intended use** | Rank existing customers by risk of no purchase in the next 90 days, to prioritise retention outreach |
+| **Population** | Customers with at least one purchase in the 180 days before the scoring date |
+| **Training data** | Monthly snapshots Jun–Oct 2010 of UCI Online Retail II (UK online gift retailer, mostly wholesale buyers) |
+| **Holdout performance** | Test (Jun–Jul 2011): PR-AUC 0.691 (95% CI 0.671–0.712), base rate 0.49, ROC-AUC 0.749, Brier 0.203, lift 1.49× in the top 10% |
+| **Production performance** | Aug / Sep 2011 replay: PR-AUC 0.646 / 0.595; predicted churn 0.45 / 0.44 vs actual 0.44 / 0.39 |
+| **Not for** | Individual decisions with legal or financial effect; new customers with no purchase history; other retailers without retraining |
+| **Known limits** | No Christmas season in training, so Q4 scores start to drift. Not significantly better than logistic regression. Callers send precomputed features (training/serving skew risk). Retrain trigger currently fires on Sep 2011 PR-AUC |
+| **Monitoring** | PSI per feature and score vs training data; delayed-label PR-AUC; retrain trigger in `churn.drift --check` |
+
+## 8. Deploying
+
+The image is self-contained (the model is baked in) and reads `$PORT`, so any Docker host works. Predictions are logged to SQLite inside the container, so the log is lost on restart unless you attach a volume at `/logs`.
+
+```bash
+make docker && make docker-run   # local: http://localhost:8000/docs
+```
+
+On Render: **New → Web Service**, connect this repo, choose **Docker** as the runtime, and set the health check path to `/health`. Render builds from the `Dockerfile` and injects `PORT`.
+
+## 9. What I'd do next at scale
 
 - **Feature store** (Feast or Tecton) so training and serving compute features with the same code from the same point-in-time source. Today the caller sends precomputed features, which is a training/serving skew risk.
 - **Batch scoring** as a nightly job writing to the warehouse. Churn is rarely a real-time problem, and the REST API exists mostly to demonstrate serving.
-- **Retraining orchestration** (Airflow, Prefect or Dagster), triggered on a schedule *and* when delayed-label PR-AUC drops below a floor. The challenger is promoted only if it beats `@champion` on the same recent window.
+- **Retraining orchestration** (Airflow, Prefect or Dagster) running `drift --check` and `retrain` on a schedule, instead of by hand.
 - **Shadow and canary deploys**: serve the challenger in shadow, compare score distributions, then move the alias.
 - **Monitoring stack**: Evidently or whylogs for drift, with metrics exported to Prometheus/Grafana and alerts. Predictions logged to a warehouse table, not SQLite.
 - **Data versioning** (DVC or lakeFS) once data arrives incrementally. Here a single SHA256 is enough lineage.
@@ -141,8 +215,9 @@ The tests use synthetic data, so CI never needs the dataset.
 ## Layout
 
 ```
-src/churn/   data.py  features.py  train.py  serve.py  drift.py
+src/churn/   data.py  features.py  train.py  serve.py  drift.py  retrain.py
 scripts/     replay.py
-tests/       test_features.py (leakage, labels)  test_model.py (quality gate, API)
-reports/     drift_v1.*  drift.*        # committed evidence
+model/       current @champion, exported from the registry (baked into the Docker image)
+tests/       test_features.py (leakage, labels)  test_model.py (quality gate, API, model, bootstrap)
+reports/     drift_v1.*  drift_v2.*  drift.* (v3)   # committed evidence
 ```

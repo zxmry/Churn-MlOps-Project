@@ -3,6 +3,5 @@ __pycache__/
 data/
 mlruns/
 mlflow.db
-model/
 predictions.db
 .DS_Store

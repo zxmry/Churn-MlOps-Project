@@ -1,5 +1,7 @@
 """Quality gate + API contract, on synthetic data so CI needs no dataset."""
+import json
 import sqlite3
+from pathlib import Path
 
 import mlflow
 import numpy as np
@@ -9,7 +11,7 @@ from sklearn.metrics import average_precision_score
 
 from churn import serve
 from churn.features import FEATURES
-from churn.train import TRUSTED_TYPES, gbm
+from churn.train import TRUSTED_TYPES, bootstrap_pr_auc, ci, gbm
 
 
 def synthetic(n=3000, seed=0):
@@ -29,7 +31,7 @@ def test_predict_contract_and_logging(tmp_path, monkeypatch):
     X, y = synthetic(500)
     mlflow.sklearn.save_model(gbm().fit(X, y), tmp_path / "model",
                               skops_trusted_types=TRUSTED_TYPES)
-    (tmp_path / "model" / "VERSION").write_text("7")
+    (tmp_path / "model" / "meta.json").write_text('{"version": "7"}')
     monkeypatch.setattr(serve, "MODEL_DIR", tmp_path / "model")
     monkeypatch.setattr(serve, "PRED_DB", str(tmp_path / "pred.db"))
 
@@ -48,3 +50,23 @@ def test_predict_contract_and_logging(tmp_path, monkeypatch):
     with sqlite3.connect(tmp_path / "pred.db") as con:
         logged = pd.read_sql("select * from predictions", con)
     assert len(logged) == 1 and logged.loc[0, "as_of"] == "2011-08-01"
+
+
+def test_committed_model_matches_features(tmp_path, monkeypatch):
+    """The model/ baked into the Docker image must accept the current feature set."""
+    monkeypatch.setattr(serve, "PRED_DB", str(tmp_path / "pred.db"))
+    model = mlflow.sklearn.load_model("model")
+    assert list(model.feature_names_in_) == FEATURES
+    with TestClient(serve.app) as client:
+        r = client.post("/predict", json=json.loads(Path("tests/smoke_request.json").read_text()))
+        assert r.status_code == 200
+
+
+def test_bootstrap_detects_real_gain_only():
+    rng = np.random.default_rng(0)
+    y = rng.random(2000) < 0.4
+    good, noise = y + rng.normal(0, 0.5, 2000), rng.random(2000)
+    boot = bootstrap_pr_auc(y, good, noise, n=200)
+    assert ci(boot[:, 0] - boot[:, 1])[0] > 0  # clearly better model: CI excludes 0
+    same = bootstrap_pr_auc(y, good, good, n=200)
+    assert ci(same[:, 0] - same[:, 1]) == (0.0, 0.0)

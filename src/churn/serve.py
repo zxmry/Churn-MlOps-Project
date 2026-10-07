@@ -1,5 +1,6 @@
 """FastAPI service: batch churn scoring + prediction logging to SQLite."""
 import datetime as dt
+import json
 import os
 import sqlite3
 from contextlib import asynccontextmanager
@@ -33,7 +34,7 @@ state = {}
 @asynccontextmanager
 async def lifespan(app):
     state["model"] = mlflow.sklearn.load_model(str(MODEL_DIR))
-    state["version"] = (MODEL_DIR / "VERSION").read_text().strip()
+    state["version"] = json.loads((MODEL_DIR / "meta.json").read_text())["version"]
     yield
 
 
