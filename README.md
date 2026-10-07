@@ -2,6 +2,8 @@
 
 ![CI](https://github.com/zxmry/Churn-MlOps-Project/actions/workflows/ci.yml/badge.svg)
 
+**Live API: https://churn-mlops-pbf8.onrender.com** (opens the interactive docs; on the free plan the first request after idle takes 30 to 60 seconds)
+
 Predict which customers of a UK online retailer will **stop buying in the next 90 days**. The project goes past the model to cover experiment tracking, a model registry, CI, a containerised API, and drift monitoring on replayed "production" traffic.
 
 The data is [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii): about 780k cleaned transactions from 5,878 customers, Dec 2009 to Dec 2011.
@@ -192,7 +194,7 @@ The tests use synthetic data or the committed model, so CI never needs the datas
 
 ## 8. Deploying
 
-**Live demo: Render** (free plan). `render.yaml` is a Render Blueprint: it builds the `Dockerfile`, which already contains the committed `model/`, and deploys `main` only after GitHub CI passes (`autoDeployTrigger: checksPass`). So the chain is: PR, CI, merge, CI on `main`, deploy. A new model only reaches the live demo after its `model/` change passes CI.
+**Live demo: Render** (free plan) at https://churn-mlops-pbf8.onrender.com. `render.yaml` is a Render Blueprint: it builds the `Dockerfile`, which already contains the committed `model/`, and deploys `main` only after GitHub CI passes (`autoDeployTrigger: checksPass`). So the chain is: PR, CI, merge, CI on `main`, deploy. A new model only reaches the live demo after its `model/` change passes CI.
 
 Setup, once: in the Render dashboard choose **New, Blueprint**, pick this repo, and click **Apply**.
 
