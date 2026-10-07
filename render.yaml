@@ -1,0 +1,10 @@
+# Render Blueprint: Render dashboard > New > Blueprint > pick this repo > Apply.
+# Builds the Dockerfile (model baked in) and deploys main only after GitHub CI passes.
+services:
+  - type: web
+    name: churn-mlops
+    runtime: docker
+    plan: free  # 0.1 CPU, 512 MB RAM; the API uses about 280 MB
+    branch: main
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
