@@ -1,0 +1,44 @@
+name: deploy-hf-space
+# Deploys to Hugging Face Spaces after CI passes on main (or on manual run).
+# Needs repo secret HF_TOKEN (write access) and repo variable HF_SPACE, e.g. "user/churn-mlops".
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy-hf-space
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: astral-sh/setup-uv@v6
+      - name: Stage only what the Docker build needs
+        run: |
+          mkdir _space
+          cp -r Dockerfile .dockerignore pyproject.toml uv.lock src model _space/
+          cp deploy/space_README.md _space/README.md
+      - name: Upload to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          uv run --no-project --with huggingface_hub python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          repo = os.environ["HF_SPACE"]
+          api.create_repo(repo, repo_type="space", space_sdk="docker", exist_ok=True)
+          api.upload_folder(folder_path="_space", repo_id=repo, repo_type="space",
+                            delete_patterns=["src/**", "model/**"],  # drop files removed upstream
+                            commit_message=f"Deploy {os.environ['SHA'][:7]} from GitHub")
+          print(f"Deployed: https://huggingface.co/spaces/{repo}")
+          PY
