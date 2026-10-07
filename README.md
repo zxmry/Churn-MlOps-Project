@@ -82,6 +82,8 @@ v1's higher PR-AUC is **not** a better model. See section 4.
 
 ## 3. Serving
 
+- `GET /` is the **Retention Console**, a business-facing page served by the API itself (`src/churn/console.html`, no build step). It shows a sample account book ranked by churn risk with tiers and recommended actions, expected spend at risk, the serving model's holdout metrics, and a what-if simulator whose sliders score live against the model. Simulations send `log: false`, so they never count as production traffic in drift monitoring.
+- `GET /model` returns the serving model's version, training window and holdout metrics.
 - `POST /predict` takes `{as_of, instances: [...]}` (up to 10k rows). It returns probabilities plus the model version.
 - `GET /health` returns status and the model version.
 - Input is validated with Pydantic: missing or non-numeric fields and NaN/inf return 422.
@@ -198,7 +200,7 @@ The tests use synthetic data or the committed model, so CI never needs the datas
 
 Setup, once: in the Render dashboard choose **New, Blueprint**, pick this repo, and click **Apply**.
 
-The root URL redirects to `/docs`, where **POST /predict, Try it out** is prefilled with a fading and an active customer.
+The root URL opens the Retention Console. Developers use `/docs`, where **POST /predict, Try it out** is prefilled with a fading and an active customer.
 
 Free-plan limits: the service sleeps after about 15 minutes without traffic, so the first request after that takes 30 to 60 seconds; open `/health` once before a demo. Predictions are logged to SQLite inside the container, so the log resets on every restart or deploy.
 
