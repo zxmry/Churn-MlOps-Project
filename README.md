@@ -192,13 +192,20 @@ The tests use synthetic data or the committed model, so CI never needs the datas
 
 ## 8. Deploying
 
-The image is self-contained (the model is baked in) and reads `$PORT`, so any Docker host works. Predictions are logged to SQLite inside the container, so the log is lost on restart unless you attach a volume at `/logs`.
+**Live demo: Hugging Face Spaces.** `.github/workflows/deploy.yml` runs after CI passes on `main`. It uploads only what the Docker build needs (`Dockerfile`, `pyproject.toml`, `uv.lock`, `src/`, `model/`) plus a Space README (`deploy/space_README.md`), and the Space rebuilds the image. So the chain is: PR, CI, merge, CI on `main`, deploy. A model only reaches the live demo after its `model/` change passes CI.
+
+Setup, once:
+1. On Hugging Face, create a write access token (Settings, Access Tokens).
+2. In this GitHub repo, add secret `HF_TOKEN` (the token) and variable `HF_SPACE` (for example `your-hf-user/churn-mlops`). The workflow creates the Space on first run.
+3. Run the workflow once by hand (Actions, deploy-hf-space, Run workflow), or merge any PR.
+
+The root URL redirects to `/docs`, where **POST /predict, Try it out** is prefilled with a fading and an active customer.
+
+The image is self-contained and reads `$PORT`, so other Docker hosts (Render, Cloud Run, Fly.io) work too. Predictions are logged to SQLite inside the container, so the log resets on restart unless you attach a volume at `/logs`.
 
 ```bash
 make docker && make docker-run   # local: http://localhost:8000/docs
 ```
-
-On Render: **New → Web Service**, connect this repo, choose **Docker** as the runtime, and set the health check path to `/health`. Render builds from the `Dockerfile` and injects `PORT`.
 
 ## 9. What I'd do next at scale
 
@@ -218,6 +225,7 @@ On Render: **New → Web Service**, connect this repo, choose **Docker** as the 
 src/churn/   data.py  features.py  train.py  serve.py  drift.py  retrain.py
 scripts/     replay.py
 model/       current @champion, exported from the registry (baked into the Docker image)
+deploy/      Hugging Face Space README (the deploy workflow uploads it)
 tests/       test_features.py (leakage, labels)  test_model.py (quality gate, API, model, bootstrap)
 reports/     drift_v1.*  drift_v2.*  drift.* (v3)   # committed evidence
 ```

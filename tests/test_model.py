@@ -38,6 +38,7 @@ def test_predict_contract_and_logging(tmp_path, monkeypatch):
     row = {"customer_id": 42, **X.iloc[0].to_dict()}
     with TestClient(serve.app) as client:
         assert client.get("/health").json()["model_version"] == "7"
+        assert client.get("/", follow_redirects=False).headers["location"] == "/docs"
         r = client.post("/predict", json={"as_of": "2011-08-01", "instances": [row]})
         assert r.status_code == 200
         body = r.json()
@@ -60,6 +61,8 @@ def test_committed_model_matches_features(tmp_path, monkeypatch):
     with TestClient(serve.app) as client:
         r = client.post("/predict", json=json.loads(Path("tests/smoke_request.json").read_text()))
         assert r.status_code == 200
+        fading, active = client.post("/predict", json=serve.EXAMPLE).json()["predictions"]
+        assert fading["churn_probability"] > active["churn_probability"]  # /docs example is sane
 
 
 def test_bootstrap_detects_real_gain_only():

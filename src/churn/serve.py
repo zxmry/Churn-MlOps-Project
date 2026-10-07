@@ -9,6 +9,7 @@ from pathlib import Path
 import mlflow
 import pandas as pd
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, create_model
 
 from churn.features import FEATURES
@@ -23,7 +24,19 @@ Instance = create_model(
 )
 
 
+# Shown prefilled in /docs "Try it out": a fading customer next to an active, growing one.
+EXAMPLE = {"as_of": "2011-08-01", "instances": [
+    {"customer_id": 1, "recency_days": 90, "n_invoices_180d": 10, "n_invoices_90d": 0,
+     "spend_180d": 230.55, "spend_90d": 0, "spend_30d": 0, "avg_basket": 23.06,
+     "n_products_180d": 7, "spend_trend": -5.44, "is_uk": 1},
+    {"customer_id": 2, "recency_days": 10, "n_invoices_180d": 12, "n_invoices_90d": 6,
+     "spend_180d": 4200, "spend_90d": 2300, "spend_30d": 900, "avg_basket": 350,
+     "n_products_180d": 85, "spend_trend": 0.2, "is_uk": 1},
+]}
+
+
 class PredictRequest(BaseModel):
+    model_config = {"json_schema_extra": {"examples": [EXAMPLE]}}
     as_of: dt.date = Field(default_factory=dt.date.today)  # replay sets simulated time
     instances: list[Instance] = Field(min_length=1, max_length=10_000)
 
@@ -39,6 +52,11 @@ async def lifespan(app):
 
 
 app = FastAPI(title="churn", lifespan=lifespan)
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse("/docs")  # hosted demos open on the interactive API docs
 
 
 @app.get("/health")
